@@ -7,27 +7,17 @@ namespace OMNIA.GTA5.ModManager
 {
     public sealed class ModCatalog
     {
-        private static readonly HashSet<string> RootAsiLoaders =
+        private static readonly HashSet<string> AllowedCategories =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                "ScriptHookV.asi",
-                "ScriptHookVDotNet.asi",
-                "OpenIV.asi"
-            };
-
-        private static readonly HashSet<string> ScriptDependencies =
-            new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            {
-                "ScriptHookVDotNet2.dll",
-                "ScriptHookVDotNet3.dll",
-                "NativeUI.dll",
-                "LemonUI.SHVDN3.dll",
-                "LemonUI.SHVDN2.dll"
+                "graphics", "audio", "vehicle-cosmetics", "maps", "ui", "quality-of-life"
             };
 
         private readonly ModStateStore _stateStore;
 
         public List<ModEntry> Entries { get; private set; } = new List<ModEntry>();
+        public int UnclassifiedPluginCount { get; private set; }
+        public bool ArchiveModsFolderDetected { get; private set; }
 
         public ModCatalog(ModStateStore stateStore)
         {
@@ -36,22 +26,23 @@ namespace OMNIA.GTA5.ModManager
 
         public void Refresh(string gameRoot)
         {
-            var found = new List<ModEntry>();
-            ScanFiles(gameRoot, "*.asi", "ASI plugin", RootAsiLoaders, found, false);
-
             string scripts = Path.Combine(gameRoot, "scripts");
-            if (Directory.Exists(scripts))
-            {
-                ScanFiles(scripts, "*.dll", "ScriptHookVDotNet assembly", ScriptDependencies, found, true);
-                ScanFiles(scripts, "*.cs", "ScriptHookVDotNet source", new HashSet<string>(), found, true);
-                ScanFiles(scripts, "*.vb", "ScriptHookVDotNet source", new HashSet<string>(), found, true);
-            }
+            UnclassifiedPluginCount = CountExternalPlugins(gameRoot, scripts);
+            ArchiveModsFolderDetected = Directory.Exists(Path.Combine(gameRoot, "mods"));
 
-            string modsFolder = Path.Combine(gameRoot, "mods");
-            if (Directory.Exists(modsFolder))
+            var found = new List<ModEntry>();
+            string registry = Path.Combine(scripts, "OMNIA", "Mods");
+            if (Directory.Exists(registry))
             {
-                found.Add(CreateEntry("openiv-mods-folder", "OpenIV mods folder", "Archive mod container",
-                    modsFolder, false));
+                foreach (string folder in Directory.GetDirectories(registry))
+                {
+                    ModEntry entry = ReadSafeManifest(folder);
+                    if (entry != null)
+                    {
+                        entry.DesiredEnabled = _stateStore.GetDesiredState(entry.Id, true);
+                        found.Add(entry);
+                    }
+                }
             }
 
             Entries = found
@@ -61,44 +52,88 @@ namespace OMNIA.GTA5.ModManager
                 .ToList();
         }
 
-        private void ScanFiles(string folder, string pattern, string kind, HashSet<string> exclusions,
-            List<ModEntry> output, bool recursive)
+        private static int CountExternalPlugins(string gameRoot, string scripts)
         {
-            if (!Directory.Exists(folder))
-                return;
-
-            SearchOption option = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-            IEnumerable<string> files;
+            int count = 0;
             try
             {
-                files = Directory.EnumerateFiles(folder, pattern, option).ToArray();
+                count += Directory.EnumerateFiles(gameRoot, "*.asi", SearchOption.TopDirectoryOnly)
+                    .Count(path =>
+                    {
+                        string name = Path.GetFileName(path);
+                        return !name.Equals("ScriptHookV.asi", StringComparison.OrdinalIgnoreCase)
+                            && !name.Equals("ScriptHookVDotNet.asi", StringComparison.OrdinalIgnoreCase)
+                            && !name.Equals("OpenIV.asi", StringComparison.OrdinalIgnoreCase);
+                    });
+            }
+            catch { }
+
+            if (!Directory.Exists(scripts))
+                return count;
+
+            var excluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "ScriptHookVDotNet2.dll", "ScriptHookVDotNet3.dll",
+                "NativeUI.dll", "LemonUI.SHVDN3.dll", "LemonUI.SHVDN2.dll"
+            };
+
+            try
+            {
+                count += Directory.EnumerateFiles(scripts, "*.dll", SearchOption.AllDirectories)
+                    .Count(path => !excluded.Contains(Path.GetFileName(path)));
+                count += Directory.EnumerateFiles(scripts, "*.cs", SearchOption.AllDirectories).Count();
+                count += Directory.EnumerateFiles(scripts, "*.vb", SearchOption.AllDirectories).Count();
+            }
+            catch { }
+
+            return count;
+        }
+
+        private static ModEntry ReadSafeManifest(string folder)
+        {
+            string manifestPath = Path.Combine(folder, "mod.ini");
+            if (!File.Exists(manifestPath))
+                return null;
+
+            var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                foreach (string raw in File.ReadAllLines(manifestPath))
+                {
+                    string line = raw.Trim();
+                    if (line.Length == 0 || line.StartsWith("#") || line.StartsWith(";"))
+                        continue;
+
+                    int split = line.IndexOf('=');
+                    if (split <= 0)
+                        continue;
+
+                    values[line.Substring(0, split).Trim()] = line.Substring(split + 1).Trim();
+                }
             }
             catch
             {
-                return;
+                return null;
             }
 
-            foreach (string file in files)
-            {
-                string name = System.IO.Path.GetFileName(file);
-                if (exclusions.Contains(name))
-                    continue;
+            string id, name, category;
+            if (!values.TryGetValue("id", out id) ||
+                !values.TryGetValue("name", out name) ||
+                !values.TryGetValue("category", out category))
+                return null;
 
-                output.Add(CreateEntry(kind + ":" + file, name, kind, file, true));
-            }
-        }
+            if (!AllowedCategories.Contains(category))
+                return null;
 
-        private ModEntry CreateEntry(string id, string name, string kind, string path, bool requiresRestart)
-        {
             return new ModEntry
             {
                 Id = id,
                 Name = name,
-                Kind = kind,
-                Path = path,
-                DesiredEnabled = _stateStore.GetDesiredState(id, true),
+                Category = category,
+                Kind = "OMNIA registered mod",
+                Path = folder,
                 CanToggleInGame = false,
-                RequiresRestart = requiresRestart
+                RequiresRestart = true
             };
         }
     }
