@@ -30,10 +30,17 @@ jobs:
         shell: pwsh
         run: |
           $output = "$PWD\src\OMNIA_MENU.cs"
-          & "$env:SANNY_EXE" --no-splash --mode sa_sbl --compile "$PWD\src\OMNIA_MENU.txt" "$output"
+          Push-Location "$env:SANNY_DIR"
+          try {
+            & "$env:SANNY_EXE" --no-splash --mode sa_sbl --compile "$PWD\src\OMNIA_MENU.txt" "$output"
+          }
+          finally {
+            Pop-Location
+          }
           if (-not (Test-Path $output)) {
-            $logs = Get-ChildItem "$env:RUNNER_TEMP\sanny" -Filter "compile.log" -Recurse -ErrorAction SilentlyContinue
-            if ($logs) { Get-Content $logs[0].FullName }
+            Write-Host "Compiler did not create the expected output. Recent files:"
+            Get-ChildItem "$env:RUNNER_TEMP\sanny" -Filter "compile.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName; Get-Content $_.FullName }
+            Get-ChildItem -Path . -Filter "compile.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName; Get-Content $_.FullName }
             throw "Sanny Builder did not produce OMNIA_MENU.cs. See compiler output above."
           }
           if ((Get-Item $output).Length -lt 16) { throw "Compiled CLEO script is unexpectedly small." }
