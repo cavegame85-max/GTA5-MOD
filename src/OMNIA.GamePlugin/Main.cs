@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 using GTA;
-using GTA.UI;
+using GameScreen = GTA.UI.Screen;
 
 namespace OMNIA.GTA5.ModManager
 {
@@ -31,7 +31,7 @@ namespace OMNIA.GTA5.ModManager
             Tick += OnTick;
             KeyDown += OnKeyDown;
 
-            Screen.ShowSubtitle("~b~OMNIA~s~ Mod Manager loaded. Press F10 to open.", 5000);
+            GameScreen.ShowSubtitle("~b~OMNIA~s~ Mod Manager loaded. Press F10 to open.", 5000);
         }
 
         private void OnTick(object sender, EventArgs e)
@@ -49,7 +49,7 @@ namespace OMNIA.GTA5.ModManager
             _f10WasDown = f10Down;
 
             if (_visible)
-                Screen.ShowSubtitle(BuildMenuText(), 1000);
+                GameScreen.ShowSubtitle(BuildMenuText(), 1000);
         }
 
         private void OnKeyDown(object sender, KeyEventArgs e)
@@ -79,7 +79,7 @@ namespace OMNIA.GTA5.ModManager
                 entry.DesiredEnabled = desired;
 
                 string state = desired ? "ON" : "OFF";
-                Screen.ShowSubtitle("~b~OMNIA~s~ " + entry.Name + ": requested " + state +
+                GameScreen.ShowSubtitle("~b~OMNIA~s~ " + entry.Name + ": requested " + state +
                     ". External plugins require restart and desktop apply.", 4500);
             }
         }
