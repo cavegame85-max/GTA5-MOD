@@ -1,7 +1,3 @@
-**/bin/
-**/obj/
-.vs/
-*.user
-*.suo
-package/
-OMNIA-GTA5-ModManager.zip
+dist/
+*.cs
+*.log

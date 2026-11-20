@@ -1,0 +1,39 @@
+{$CLEO .cs}
+0000:
+03A4: name_thread 'OMNIA'
+
+0@ = 0
+
+:OMNIA_MAIN
+wait 0
+
+// F10 toggles the prototype menu.
+if
+    0AB0: key_pressed 0x79
+then
+    if
+        0@ == 0
+    then
+        0@ = 1
+    else
+        0@ = 0
+    end
+
+    // Wait for key release to prevent repeated toggles.
+    while
+        0AB0: key_pressed 0x79
+    wait 0
+    end
+    wait 120
+end
+
+if
+    0@ == 1
+then
+    // Temporary in-game panel placeholder. The full UI and mod scan
+    // will be implemented in later stages.
+    038E: draw_box_position 320.0 125.0 size 300.0 150.0 RGBA 8 14 26 210
+    0ACD: show_text_highpriority "OMNIA SA~n~MOD MENU~n~~n~Mod catalog is empty~n~F10 - close" time 0
+end
+
+jump @OMNIA_MAIN

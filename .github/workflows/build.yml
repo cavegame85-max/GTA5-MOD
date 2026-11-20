@@ -1,10 +1,8 @@
-name: Build OMNIA Mod Manager
+name: Build OMNIA SA
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 permissions:
@@ -17,34 +15,35 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v2
-
-      - name: Setup NuGet
-        uses: NuGet/setup-nuget@v2
-
-      - name: Restore and build
+      - name: Download Sanny Builder
         shell: pwsh
-        run: dotnet build src/OMNIA.GamePlugin/OMNIA.GamePlugin.csproj --configuration Release
+        run: |
+          $url = "https://github.com/sannybuilder/dev/releases/download/v4.2.0/SannyBuilder-v4.2.0.zip"
+          Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\sanny.zip"
+          Expand-Archive -Path "$env:RUNNER_TEMP\sanny.zip" -DestinationPath "$env:RUNNER_TEMP\sanny" -Force
+          $compiler = Get-ChildItem "$env:RUNNER_TEMP\sanny" -Filter "sanny.exe" -Recurse | Select-Object -First 1
+          if (-not $compiler) { throw "Sanny Builder compiler was not found in the release archive." }
+          "SANNY_EXE=$($compiler.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Compile CLEO script
+        shell: pwsh
+        run: |
+          & "$env:SANNY_EXE" --no-splash --mode sa_sbl --compile "$PWD\src\OMNIA_MENU.txt"
+          if ($LASTEXITCODE -ne 0) { throw "Sanny Builder compilation failed with exit code $LASTEXITCODE" }
+          if (-not (Test-Path "src\OMNIA_MENU.cs")) { throw "Compiler did not produce src/OMNIA_MENU.cs" }
 
       - name: Stage installable files
         shell: pwsh
         run: |
-          $stage = Join-Path $PWD "package"
-          New-Item -ItemType Directory -Force -Path (Join-Path $stage "scripts/OMNIA") | Out-Null
-          Copy-Item "src/OMNIA.GamePlugin/bin/Release/net48/OMNIA.GTA5.ModManager.dll" (Join-Path $stage "scripts/") -Force
-          Copy-Item "docs/INSTALLATION.md" (Join-Path $stage "OMNIA-INSTALLATION.txt") -Force
-          @(
-            "# OMNIA Mod Manager configuration",
-            "# Desired states are recorded here. External plugin changes need a restart and desktop installer.",
-            ""
-          ) | Set-Content (Join-Path $stage "scripts/OMNIA/mod-state.ini")
-          Compress-Archive -Path (Join-Path $stage "*") -DestinationPath "OMNIA-GTA5-ModManager.zip" -Force
+          New-Item -ItemType Directory -Force -Path "dist\OMNIA-SA-1.01\cleo" | Out-Null
+          Copy-Item "src\OMNIA_MENU.cs" "dist\OMNIA-SA-1.01\cleo\OMNIA_MENU.cs"
+          Copy-Item "docs\INSTALLATION.md" "dist\OMNIA-SA-1.01\INSTALLATION.txt"
+          Compress-Archive -Path "dist\OMNIA-SA-1.01\*" -DestinationPath "dist\OMNIA-SA-1.01.zip" -Force
 
       - name: Upload installable ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: OMNIA-GTA5-ModManager
-          path: OMNIA-GTA5-ModManager.zip
+          name: OMNIA-SA-1.01
+          path: dist/OMNIA-SA-1.01.zip
           if-no-files-found: error
           retention-days: 14
