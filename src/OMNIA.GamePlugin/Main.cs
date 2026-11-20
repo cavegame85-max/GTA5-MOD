@@ -10,6 +10,7 @@ namespace OMNIA.GTA5.ModManager
 {
     public sealed class Main : Script
     {
+        private const int VisibleRows = 7;
         private readonly ModCatalog _catalog;
         private readonly ModStateStore _stateStore;
         private readonly string _gameRoot;
@@ -48,9 +49,7 @@ namespace OMNIA.GTA5.ModManager
             _f10WasDown = f10Down;
 
             if (_visible)
-            {
                 Screen.ShowSubtitle(BuildMenuText(), 1000);
-            }
         }
 
         private void OnKeyDown(object sender, KeyEventArgs e)
@@ -58,7 +57,7 @@ namespace OMNIA.GTA5.ModManager
             if (!_visible)
                 return;
 
-            if (e.KeyCode == Keys.Escape || e.KeyCode == Keys.F10)
+            if (e.KeyCode == Keys.Escape)
             {
                 _visible = false;
                 return;
@@ -80,10 +79,8 @@ namespace OMNIA.GTA5.ModManager
                 entry.DesiredEnabled = desired;
 
                 string state = desired ? "ON" : "OFF";
-                string note = entry.CanToggleInGame
-                    ? "setting saved"
-                    : "request saved; external plugin changes need restart/launcher";
-                Screen.ShowSubtitle("~b~OMNIA~s~ " + entry.Name + ": " + state + " (" + note + ")", 4500);
+                Screen.ShowSubtitle("~b~OMNIA~s~ " + entry.Name + ": requested " + state +
+                    ". External plugins require restart and desktop apply.", 4500);
             }
         }
 
@@ -92,8 +89,8 @@ namespace OMNIA.GTA5.ModManager
             var lines = new List<string>
             {
                 "~b~OMNIA MOD MANAGER~s~  |  GTA V LEGACY",
-                "F10 / ESC: close   UP/DOWN: select   ENTER: request ON/OFF",
-                "Detected files only; runtime state of third-party mods is not guaranteed.",
+                "F10: close   ESC: close   UP/DOWN: select   ENTER: request ON/OFF",
+                "Detected files only; actual runtime state is not guaranteed.",
                 " "
             };
 
@@ -103,19 +100,20 @@ namespace OMNIA.GTA5.ModManager
             }
             else
             {
-                for (int i = 0; i < _catalog.Entries.Count; i++)
+                int start = (_selectedIndex / VisibleRows) * VisibleRows;
+                int end = Math.Min(start + VisibleRows, _catalog.Entries.Count);
+                for (int i = start; i < end; i++)
                 {
                     ModEntry entry = _catalog.Entries[i];
                     string cursor = i == _selectedIndex ? "~b~> " : "  ";
                     string desired = entry.DesiredEnabled ? "~g~ON~s~" : "~r~OFF~s~";
-                    string suffix = entry.RequiresRestart ? " [restart]" : "";
-                    lines.Add(cursor + entry.Name + "  " + desired + suffix);
+                    lines.Add(cursor + entry.Name + "  " + desired + " [restart]");
                 }
+                lines.Add("Showing " + (start + 1) + "-" + end + " of " + _catalog.Entries.Count);
             }
 
             lines.Add(" ");
-            lines.Add("External mod toggles are queued; they are not unloaded live.");
-            lines.Add("Story Mode only.");
+            lines.Add("External changes are queued, not unloaded live. Story Mode only.");
             return string.Join("\n", lines);
         }
     }
