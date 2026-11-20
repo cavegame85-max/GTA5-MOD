@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Windows.Forms;
 using GTA;
 using GameScreen = GTA.UI.Screen;
@@ -64,13 +63,9 @@ namespace OMNIA.GTA5.ModManager
             }
 
             if (e.KeyCode == Keys.Down)
-            {
                 _selectedIndex = Math.Min(_selectedIndex + 1, Math.Max(0, _catalog.Entries.Count - 1));
-            }
             else if (e.KeyCode == Keys.Up)
-            {
                 _selectedIndex = Math.Max(0, _selectedIndex - 1);
-            }
             else if (e.KeyCode == Keys.Enter && _catalog.Entries.Count > 0)
             {
                 ModEntry entry = _catalog.Entries[_selectedIndex];
@@ -80,7 +75,7 @@ namespace OMNIA.GTA5.ModManager
 
                 string state = desired ? "ON" : "OFF";
                 GameScreen.ShowSubtitle("~b~OMNIA~s~ " + entry.Name + ": requested " + state +
-                    ". External plugins require restart and desktop apply.", 4500);
+                    ". Apply after restart with the OMNIA desktop installer.", 4500);
             }
         }
 
@@ -89,15 +84,14 @@ namespace OMNIA.GTA5.ModManager
             var lines = new List<string>
             {
                 "~b~OMNIA MOD MANAGER~s~  |  GTA V LEGACY",
-                "F10: close   ESC: close   UP/DOWN: select   ENTER: request ON/OFF",
-                "Detected files only; actual runtime state is not guaranteed.",
+                "F10 / ESC: close   UP/DOWN: select   ENTER: request ON/OFF",
+                "Supported: graphics, audio, vehicle cosmetics, maps, UI, QoL",
+                "Unclassified plugin files detected: " + _catalog.UnclassifiedPluginCount,
                 " "
             };
 
             if (_catalog.Entries.Count == 0)
-            {
-                lines.Add("No supported mod files detected.");
-            }
+                lines.Add("No supported OMNIA mod manifests registered yet.");
             else
             {
                 int start = (_selectedIndex / VisibleRows) * VisibleRows;
@@ -107,13 +101,15 @@ namespace OMNIA.GTA5.ModManager
                     ModEntry entry = _catalog.Entries[i];
                     string cursor = i == _selectedIndex ? "~b~> " : "  ";
                     string desired = entry.DesiredEnabled ? "~g~ON~s~" : "~r~OFF~s~";
-                    lines.Add(cursor + entry.Name + "  " + desired + " [restart]");
+                    lines.Add(cursor + entry.Name + " [" + entry.Category + "] " + desired + " [restart]");
                 }
                 lines.Add("Showing " + (start + 1) + "-" + end + " of " + _catalog.Entries.Count);
             }
 
-            lines.Add(" ");
-            lines.Add("External changes are queued, not unloaded live. Story Mode only.");
+            if (_catalog.ArchiveModsFolderDetected)
+                lines.Add("Archive mods folder detected (contents not individually indexed).");
+
+            lines.Add("Only verified supported categories are listed. Story Mode only.");
             return string.Join("\n", lines);
         }
     }
