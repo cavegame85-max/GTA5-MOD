@@ -29,10 +29,11 @@ jobs:
       - name: Compile CLEO script
         shell: pwsh
         run: |
-          $output = "$PWD\src\OMNIA_MENU.cs"
+          $source = Join-Path $env:GITHUB_WORKSPACE "src\OMNIA_MENU.txt"
+          $output = Join-Path $env:GITHUB_WORKSPACE "src\OMNIA_MENU.cs"
           Push-Location "$env:SANNY_DIR"
           try {
-            & "$env:SANNY_EXE" --no-splash --mode sa_sbl --compile "$PWD\src\OMNIA_MENU.txt" "$output"
+            & "$env:SANNY_EXE" --no-splash --mode sa_sbl --compile "$source" "$output"
           }
           finally {
             Pop-Location
