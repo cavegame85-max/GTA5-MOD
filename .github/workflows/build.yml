@@ -31,18 +31,16 @@ jobs:
         run: |
           $source = Join-Path $env:GITHUB_WORKSPACE "src\OMNIA_MENU.txt"
           $output = Join-Path $env:GITHUB_WORKSPACE "src\OMNIA_MENU.cs"
-          Push-Location "$env:SANNY_DIR"
-          try {
-            & "$env:SANNY_EXE" --no-splash --mode sa_sbl --compile "$source" "$output"
-          }
-          finally {
-            Pop-Location
-          }
+          $stdout = Join-Path $env:RUNNER_TEMP "sanny-stdout.txt"
+          $stderr = Join-Path $env:RUNNER_TEMP "sanny-stderr.txt"
+          $process = Start-Process -FilePath "$env:SANNY_EXE" -ArgumentList @("--no-splash", "--mode", "sa_sbl", "--compile", "$source") -WorkingDirectory "$env:SANNY_DIR" -Wait -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          if (Test-Path $stdout) { Get-Content $stdout }
+          if (Test-Path $stderr) { Get-Content $stderr }
           if (-not (Test-Path $output)) {
-            Write-Host "Compiler did not create the expected output. Recent files:"
-            Get-ChildItem "$env:RUNNER_TEMP\sanny" -Filter "compile.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName; Get-Content $_.FullName }
-            Get-ChildItem -Path . -Filter "compile.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName; Get-Content $_.FullName }
-            throw "Sanny Builder did not produce OMNIA_MENU.cs. See compiler output above."
+            Write-Host "Sanny Builder exit code: $($process.ExitCode)"
+            Get-ChildItem "$env:SANNY_DIR" -Force | Select-Object Name,Length
+            Get-ChildItem "$env:SANNY_DIR" -Filter "compile.log" -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Get-Content $_.FullName }
+            throw "Sanny Builder did not produce OMNIA_MENU.cs."
           }
           if ((Get-Item $output).Length -lt 16) { throw "Compiled CLEO script is unexpectedly small." }
 
