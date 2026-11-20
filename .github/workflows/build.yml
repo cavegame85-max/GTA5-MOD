@@ -1,0 +1,50 @@
+name: Build OMNIA Mod Manager
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+
+      - name: Restore and build
+        shell: pwsh
+        run: dotnet build src/OMNIA.GamePlugin/OMNIA.GamePlugin.csproj --configuration Release
+
+      - name: Stage installable files
+        shell: pwsh
+        run: |
+          $stage = Join-Path $PWD "package"
+          New-Item -ItemType Directory -Force -Path (Join-Path $stage "scripts/OMNIA") | Out-Null
+          Copy-Item "src/OMNIA.GamePlugin/bin/Release/net48/OMNIA.GTA5.ModManager.dll" (Join-Path $stage "scripts/") -Force
+          Copy-Item "docs/INSTALLATION.md" (Join-Path $stage "OMNIA-INSTALLATION.txt") -Force
+          @(
+            "# OMNIA Mod Manager configuration",
+            "# Desired states are recorded here. External plugin changes need a restart and desktop installer.",
+            ""
+          ) | Set-Content (Join-Path $stage "scripts/OMNIA/mod-state.ini")
+          Compress-Archive -Path (Join-Path $stage "*") -DestinationPath "OMNIA-GTA5-ModManager.zip" -Force
+
+      - name: Upload installable ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: OMNIA-GTA5-ModManager
+          path: OMNIA-GTA5-ModManager.zip
+          if-no-files-found: error
+          retention-days: 14
