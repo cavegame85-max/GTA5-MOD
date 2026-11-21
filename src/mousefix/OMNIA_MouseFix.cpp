@@ -94,8 +94,58 @@ static HRESULT WINAPI omn_direct_input8_create(HINSTANCE instance, DWORD version
     return hr;
 }
 
+
+static void write_mod_catalog() {
+    char gamePath[MAX_PATH]{};
+    if (!GetModuleFileNameA(nullptr, gamePath, MAX_PATH)) return;
+
+    char* slash = strrchr(gamePath, '\\');
+    if (!slash) return;
+    *(slash + 1) = '\0';
+
+    char catalogPath[MAX_PATH]{};
+    sprintf_s(catalogPath, "%sOMNIA_mods.txt", gamePath);
+    FILE* file = nullptr;
+    fopen_s(&file, catalogPath, "wb");
+    if (!file) return;
+
+    unsigned int count = 0;
+    WIN32_FIND_DATAA data{};
+    char pattern[MAX_PATH]{};
+    sprintf_s(pattern, "%s*.asi", gamePath);
+    HANDLE search = FindFirstFileA(pattern, &data);
+    if (search != INVALID_HANDLE_VALUE) {
+        do {
+            if (!(data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+                fprintf(file, "ASI: %s\n", data.cFileName);
+                ++count;
+            }
+        } while (FindNextFileA(search, &data));
+        FindClose(search);
+    }
+
+    char cleoPath[MAX_PATH]{};
+    sprintf_s(cleoPath, "%scleo\\", gamePath);
+    sprintf_s(pattern, "%s*.cs", cleoPath);
+    search = FindFirstFileA(pattern, &data);
+    if (search != INVALID_HANDLE_VALUE) {
+        do {
+            if (!(data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+                fprintf(file, "CLEO: %s\n", data.cFileName);
+                ++count;
+            }
+        } while (FindNextFileA(search, &data));
+        FindClose(search);
+    }
+
+    if (count == 0) fprintf(file, "No supported ASI/CLEO mods found.\n");
+    fclose(file);
+}
+
 static DWORD WINAPI initialize_hooks(void*) {
     if (InterlockedCompareExchange(&g_started, 1, 0) != 0) return 0;
+
+    write_mod_catalog();
 
     wchar_t systemDir[MAX_PATH]{};
     GetSystemDirectoryW(systemDir, MAX_PATH);
