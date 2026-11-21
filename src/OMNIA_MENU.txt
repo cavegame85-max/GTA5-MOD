@@ -7,7 +7,7 @@
 :OMNIA_MAIN
 wait 0
 
-// F10 toggles the prototype menu.
+// F10 toggle: one toggle per physical key press.
 if
     0AB0: key_pressed 0x79
 then
@@ -18,8 +18,6 @@ then
     else
         0@ = 0
     end
-
-    // Wait for key release to prevent repeated toggles.
     while
         0AB0: key_pressed 0x79
     wait 0
@@ -30,10 +28,25 @@ end
 if
     0@ == 1
 then
-    // Temporary in-game panel placeholder. The full UI and mod scan
-    // will be implemented in later stages.
-    038E: draw_box_position 320.0 125.0 size 300.0 150.0 RGBA 8 14 26 210
-    0ACD: show_text_highpriority "OMNIA SA~n~MOD MENU~n~~n~Mod catalog is empty~n~F10 - close" time 0
+    // GTA San Andreas-inspired compact black panel with green/orange accents.
+    038E: draw_box_position 320.0 222.0 size 330.0 250.0 RGBA 0 0 0 205
+    038E: draw_box_position 320.0 111.0 size 330.0 28.0 RGBA 35 75 42 240
+    038E: draw_box_position 320.0 130.0 size 330.0 3.0 RGBA 220 135 45 255
+    038E: draw_box_position 320.0 159.0 size 306.0 27.0 RGBA 32 32 32 225
+    038E: draw_box_position 320.0 193.0 size 306.0 27.0 RGBA 32 32 32 225
+    038E: draw_box_position 320.0 227.0 size 306.0 27.0 RGBA 32 32 32 225
+    038E: draw_box_position 320.0 261.0 size 306.0 27.0 RGBA 32 32 32 225
+    038E: draw_box_position 320.0 295.0 size 306.0 27.0 RGBA 32 32 32 225
+    038E: draw_box_position 320.0 330.0 size 330.0 2.0 RGBA 220 135 45 220
+
+    0ACD: show_text_highpriority "OMNIA" time 0
+    0ACD: show_text_highpriority "SAN ANDREAS  |  CONTROL CENTER" time 0
+    0ACD: show_text_highpriority "01   GAME AGENT" time 0
+    0ACD: show_text_highpriority "02   MOD CATALOG" time 0
+    0ACD: show_text_highpriority "03   SETTINGS" time 0
+    0ACD: show_text_highpriority "04   MOUSE FIX" time 0
+    0ACD: show_text_highpriority "MOUSE FIX  |  DirectInput recovery ASI module" time 0
+    0ACD: show_text_highpriority "F10  -  CLOSE MENU" time 0
 end
 
 jump @OMNIA_MAIN
