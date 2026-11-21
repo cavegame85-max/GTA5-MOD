@@ -61,6 +61,26 @@ jobs:
           if ([BitConverter]::ToUInt16($bytes, $offset + 4) -ne 0x014C) { throw "Not an x86 plugin." }
           Write-Host "x86 PE verification passed."
 
+      - name: Download Sanny Builder
+        shell: pwsh
+        run: |
+          $url = "https://github.com/sannybuilder/dev/releases/download/v4.2.0/SannyBuilder-v4.2.0.zip"
+          Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\sanny.zip"
+          Expand-Archive -Path "$env:RUNNER_TEMP\sanny.zip" -DestinationPath "$env:RUNNER_TEMP\sanny" -Force
+          $compiler = Get-ChildItem "$env:RUNNER_TEMP\sanny" -Filter "sanny.exe" -Recurse | Select-Object -First 1
+          if (-not $compiler) { throw "Sanny Builder compiler was not found." }
+          "SANNY_EXE=$($compiler.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "SANNY_DIR=$($compiler.DirectoryName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Compile OMNIA in-game menu
+        shell: pwsh
+        run: |
+          $source = Join-Path $env:GITHUB_WORKSPACE "src\OMNIA_MENU.txt"
+          $output = Join-Path $env:GITHUB_WORKSPACE "src\OMNIA_MENU.cs"
+          $process = Start-Process -FilePath "$env:SANNY_EXE" -ArgumentList @("--no-splash", "--game", "sa", "--compile", $source, $output) -WorkingDirectory "$env:SANNY_DIR" -Wait -PassThru
+          if (-not (Test-Path $output)) { throw "OMNIA_MENU.cs compilation failed (exit $($process.ExitCode))." }
+          if ((Get-Item $output).Length -lt 16) { throw "Compiled menu script is unexpectedly small." }
+
       - name: Stage package
         shell: pwsh
         run: |
