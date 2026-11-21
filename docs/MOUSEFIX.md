@@ -1,29 +1,33 @@
-# OMNIA MouseFix
+# OMNIA SA — MouseFix + in-game menu
 
-ASI plugin for classic GTA San Andreas PC 1.0 and 1.01 (32-bit).
+This package contains the OMNIA in-game CLEO menu and the separate DirectInput recovery ASI module.
 
-## What this build changes
+## Package contents
 
-The plugin hooks DirectInput 8 initialization and the system mouse device. If the game asks for mouse state or buffered mouse events while DirectInput reports `DIERR_INPUTLOST` or `DIERR_NOTACQUIRED`, MouseFix attempts to reacquire the device and retries that read once.
-
-This is an input-recovery patch. It does not replace the game's controls, synthesize mouse movement, or change keyboard bindings.
+- `OMNIA_MouseFix.asi` — DirectInput device-loss recovery companion module.
+- `cleo/OMNIA_MENU.cs` — OMNIA in-game control-center menu.
 
 ## Requirements
 
-- Classic 32-bit GTA San Andreas PC.
-- A compatible ASI Loader already installed.
+- Classic 32-bit GTA San Andreas PC 1.0 or 1.01.
+- CLEO 4 installed.
+- A compatible ASI Loader installed.
 - Windows x86/x64.
-
-The archive does not include an ASI Loader or game files.
 
 ## Install
 
 1. Close GTA San Andreas.
 2. Back up the game folder.
-3. Extract `OMNIA_MouseFix.asi` into the folder containing `gta_sa.exe` and/or `gta_sa_1.01.exe`.
-4. Start the game normally.
-5. To uninstall, close the game and remove `OMNIA_MouseFix.asi`.
+3. Copy `OMNIA_MouseFix.asi` into the folder containing the game's EXE.
+4. Copy `cleo/OMNIA_MENU.cs` into the game's `cleo` folder.
+5. Start the game and press F10 to open or close the OMNIA menu.
 
-## Compatibility note
+The menu is drawn only while open; pressing F10 again disables its drawing immediately. The MouseFix entry identifies the companion ASI component; it is not a live runtime detector.
 
-This plugin addresses DirectInput device-lost recovery. It cannot guarantee compatibility with every third-party input wrapper or every mouse driver. Runtime testing on both game executables is required before calling a release fully verified.
+## Uninstall
+
+Close the game, then remove `OMNIA_MouseFix.asi` from the game folder and `OMNIA_MENU.cs` from the `cleo` folder.
+
+## Compatibility
+
+MouseFix attempts to reacquire the DirectInput mouse device after `DIERR_INPUTLOST` or `DIERR_NOTACQUIRED`. It does not synthesize input or replace the game's controls. Runtime behavior still requires testing in the target game build.
