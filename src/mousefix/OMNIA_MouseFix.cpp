@@ -1,69 +1,126 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <dinput.h>
 #include <cstdio>
 #include <cstdint>
+#include "MinHook.h"
 
-static HMODULE g_module = nullptr;
-static volatile LONG g_running = 1;
+#pragma comment(lib, "dinput8.lib")
+#pragma comment(lib, "dxguid.lib")
 
-static void write_log(FILE* file, const wchar_t* exeName) {
-    POINT p{};
-    const BOOL havePoint = GetCursorPos(&p);
-    HWND foreground = GetForegroundWindow();
-    wchar_t title[256]{};
-    if (foreground) GetWindowTextW(foreground, title, 255);
+using DirectInput8Create_t = HRESULT (WINAPI*)(HINSTANCE, DWORD, REFIID, LPVOID*, LPUNKNOWN);
+using CreateDevice_t = HRESULT (STDMETHODCALLTYPE*)(LPDIRECTINPUT8A, REFGUID, LPDIRECTINPUTDEVICE8A*, LPUNKNOWN);
+using Acquire_t = HRESULT (STDMETHODCALLTYPE*)(LPDIRECTINPUTDEVICE8A);
+using GetDeviceState_t = HRESULT (STDMETHODCALLTYPE*)(LPDIRECTINPUTDEVICE8A, DWORD, LPVOID);
+using GetDeviceData_t = HRESULT (STDMETHODCALLTYPE*)(LPDIRECTINPUTDEVICE8A, DWORD, LPDIDEVICEOBJECTDATA, LPDWORD, DWORD);
 
-    const SHORT left = GetAsyncKeyState(VK_LBUTTON);
-    const SHORT right = GetAsyncKeyState(VK_RBUTTON);
-    const SHORT middle = GetAsyncKeyState(VK_MBUTTON);
+static DirectInput8Create_t g_realDirectInput8Create = nullptr;
+static CreateDevice_t g_realCreateDevice = nullptr;
+static Acquire_t g_realAcquire = nullptr;
+static GetDeviceState_t g_realGetDeviceState = nullptr;
+static GetDeviceData_t g_realGetDeviceData = nullptr;
+static HMODULE g_realDinput = nullptr;
+static volatile LONG g_started = 0;
 
-    std::fwprintf(file,
-        L"exe=%ls | foreground=%p | title=%ls | cursor=%ls(%ld,%ld) | buttons=L:%d R:%d M:%d\n",
-        exeName, foreground, title, havePoint ? L"yes" : L"no",
-        p.x, p.y, (left & 0x8000) != 0, (right & 0x8000) != 0,
-        (middle & 0x8000) != 0);
-    std::fflush(file);
+static bool patch_vtable(void** slot, void* replacement, void** original) {
+    DWORD oldProtect = 0;
+    if (!VirtualProtect(slot, sizeof(void*), PAGE_EXECUTE_READWRITE, &oldProtect))
+        return false;
+    if (!*original) *original = *slot;
+    *slot = replacement;
+    DWORD ignored = 0;
+    VirtualProtect(slot, sizeof(void*), oldProtect, &ignored);
+    FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
+    return true;
 }
 
-static DWORD WINAPI diagnostic_thread(void*) {
-    wchar_t userProfile[MAX_PATH]{};
-    wchar_t exePath[MAX_PATH]{};
-    wchar_t exeName[MAX_PATH] = L"(unknown)";
-    GetEnvironmentVariableW(L"USERPROFILE", userProfile, MAX_PATH);
-    GetModuleFileNameW(nullptr, exePath, MAX_PATH);
-    const wchar_t* lastSlash = wcsrchr(exePath, L'\\');
-    if (lastSlash) {
-        wcsncpy_s(exeName, lastSlash + 1, _TRUNCATE);
+static HRESULT STDMETHODCALLTYPE omn_acquire(LPDIRECTINPUTDEVICE8A device) {
+    return g_realAcquire ? g_realAcquire(device) : DIERR_NOTINITIALIZED;
+}
+
+static HRESULT STDMETHODCALLTYPE omn_get_state(LPDIRECTINPUTDEVICE8A device, DWORD size, LPVOID data) {
+    if (!g_realGetDeviceState) return DIERR_NOTINITIALIZED;
+    HRESULT hr = g_realGetDeviceState(device, size, data);
+    if (hr == DIERR_INPUTLOST || hr == DIERR_NOTACQUIRED) {
+        HRESULT acquireResult = g_realAcquire ? g_realAcquire(device) : DIERR_NOTINITIALIZED;
+        if (SUCCEEDED(acquireResult) || acquireResult == S_FALSE)
+            hr = g_realGetDeviceState(device, size, data);
     }
+    return hr;
+}
 
-    wchar_t logPath[MAX_PATH]{};
-    swprintf_s(logPath, L"%ls\\Documents\\OMNIA_MouseFix.log", userProfile);
-    FILE* file = nullptr;
-    _wfopen_s(&file, logPath, L"wt, ccs=UTF-8");
-    if (!file) return 0;
-
-    std::fwprintf(file, L"OMNIA MouseFix diagnostic bootstrap 0.1.0\n");
-    std::fwprintf(file, L"Process: %ls\n", exePath);
-    std::fwprintf(file, L"Architecture: x86 ASI build\n");
-    std::fwprintf(file, L"NOTE: diagnostic-only build; it does not alter game input.\n\n");
-    std::fflush(file);
-
-    while (InterlockedCompareExchange(&g_running, 1, 1)) {
-        write_log(file, exeName);
-        Sleep(1000);
+static HRESULT STDMETHODCALLTYPE omn_get_data(LPDIRECTINPUTDEVICE8A device, DWORD size,
+    LPDIDEVICEOBJECTDATA data, LPDWORD count, DWORD flags) {
+    if (!g_realGetDeviceData) return DIERR_NOTINITIALIZED;
+    HRESULT hr = g_realGetDeviceData(device, size, data, count, flags);
+    if (hr == DIERR_INPUTLOST || hr == DIERR_NOTACQUIRED) {
+        HRESULT acquireResult = g_realAcquire ? g_realAcquire(device) : DIERR_NOTINITIALIZED;
+        if (SUCCEEDED(acquireResult) || acquireResult == S_FALSE)
+            hr = g_realGetDeviceData(device, size, data, count, flags);
     }
-    fclose(file);
+    return hr;
+}
+
+static void hook_mouse_device(LPDIRECTINPUTDEVICE8A device) {
+    if (!device || !device->lpVtbl) return;
+    void** vtable = *reinterpret_cast<void***>(device);
+    // IDirectInputDevice8A: IUnknown(0..2), Acquire(7), GetDeviceState(9), GetDeviceData(10).
+    patch_vtable(&vtable[7], reinterpret_cast<void*>(&omn_acquire), reinterpret_cast<void**>(&g_realAcquire));
+    patch_vtable(&vtable[9], reinterpret_cast<void*>(&omn_get_state), reinterpret_cast<void**>(&g_realGetDeviceState));
+    patch_vtable(&vtable[10], reinterpret_cast<void*>(&omn_get_data), reinterpret_cast<void**>(&g_realGetDeviceData));
+}
+
+static HRESULT STDMETHODCALLTYPE omn_create_device(LPDIRECTINPUT8A input, REFGUID guid,
+    LPDIRECTINPUTDEVICE8A* outDevice, LPUNKNOWN outer) {
+    if (!g_realCreateDevice) return DIERR_NOTINITIALIZED;
+    HRESULT hr = g_realCreateDevice(input, guid, outDevice, outer);
+    if (SUCCEEDED(hr) && outDevice && *outDevice) {
+        if (IsEqualGUID(guid, GUID_SysMouse))
+            hook_mouse_device(*outDevice);
+    }
+    return hr;
+}
+
+static HRESULT WINAPI omn_direct_input8_create(HINSTANCE instance, DWORD version,
+    REFIID iid, LPVOID* out, LPUNKNOWN outer) {
+    if (!g_realDirectInput8Create) return DIERR_NOTINITIALIZED;
+    HRESULT hr = g_realDirectInput8Create(instance, version, iid, out, outer);
+    if (SUCCEEDED(hr) && out && *out && IsEqualIID(iid, IID_IDirectInput8A)) {
+        LPDIRECTINPUT8A input = static_cast<LPDIRECTINPUT8A>(*out);
+        void** vtable = *reinterpret_cast<void***>(input);
+        patch_vtable(&vtable[3], reinterpret_cast<void*>(&omn_create_device),
+                     reinterpret_cast<void**>(&g_realCreateDevice));
+    }
+    return hr;
+}
+
+static DWORD WINAPI initialize_hooks(void*) {
+    if (InterlockedCompareExchange(&g_started, 1, 0) != 0) return 0;
+
+    wchar_t systemDir[MAX_PATH]{};
+    GetSystemDirectoryW(systemDir, MAX_PATH);
+    wchar_t path[MAX_PATH]{};
+    swprintf_s(path, L"%ls\\dinput8.dll", systemDir);
+    g_realDinput = LoadLibraryW(path);
+    if (!g_realDinput) return 0;
+
+    g_realDirectInput8Create = reinterpret_cast<DirectInput8Create_t>(
+        GetProcAddress(g_realDinput, "DirectInput8Create"));
+    if (!g_realDirectInput8Create) return 0;
+
+    if (MH_Initialize() != MH_OK) return 0;
+    if (MH_CreateHook(reinterpret_cast<void*>(g_realDirectInput8Create),
+        reinterpret_cast<void*>(&omn_direct_input8_create),
+        reinterpret_cast<void**>(&g_realDirectInput8Create)) != MH_OK) return 0;
+    MH_EnableHook(reinterpret_cast<void*>(g_realDirectInput8Create));
     return 0;
 }
 
 BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID) {
     if (reason == DLL_PROCESS_ATTACH) {
-        g_module = module;
         DisableThreadLibraryCalls(module);
-        HANDLE thread = CreateThread(nullptr, 0, diagnostic_thread, nullptr, 0, nullptr);
+        HANDLE thread = CreateThread(nullptr, 0, initialize_hooks, nullptr, 0, nullptr);
         if (thread) CloseHandle(thread);
-    } else if (reason == DLL_PROCESS_DETACH) {
-        InterlockedExchange(&g_running, 0);
     }
     return TRUE;
 }
