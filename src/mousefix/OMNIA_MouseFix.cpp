@@ -62,7 +62,7 @@ static HRESULT STDMETHODCALLTYPE omn_get_data(LPDIRECTINPUTDEVICE8A device, DWOR
 }
 
 static void hook_mouse_device(LPDIRECTINPUTDEVICE8A device) {
-    if (!device || !device->lpVtbl) return;
+    if (!device) return;
     void** vtable = *reinterpret_cast<void***>(device);
     // IDirectInputDevice8A: IUnknown(0..2), Acquire(7), GetDeviceState(9), GetDeviceData(10).
     patch_vtable(&vtable[7], reinterpret_cast<void*>(&omn_acquire), reinterpret_cast<void**>(&g_realAcquire));
