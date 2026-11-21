@@ -19,3 +19,8 @@ GitHub Actions скачивает Sanny Builder 4.2.0, компилирует CL
 ## Ограничения прототипа
 Это первый проверочный интерфейс, а не полноценный графический мод-менеджер. Он ещё не сканирует установленные моды и не включает/отключает их. Проверка непосредственно в игре ещё не выполнена.
 
+
+
+## OMNIA MouseFix (separate module)
+
+A separate x86 ASI project is being developed on the `omnia-mousefix` branch. See [MouseFix documentation](docs/MOUSEFIX.md). Its first CI milestone is a diagnostic bootstrap; it does not yet claim to repair mouse input. The dedicated workflow is **Build OMNIA MouseFix**.
