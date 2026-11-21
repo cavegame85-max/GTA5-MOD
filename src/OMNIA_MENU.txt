@@ -3,11 +3,18 @@
 03A4: name_thread 'OMNIA'
 
 0@ = 0
+1@ = 0
+2@ = 0
+3@ = 0
+4@ = 0
+5@ = 0
+6@ = 0
+7@ = 0
 
 :OMNIA_MAIN
 wait 0
 
-// Toggle only once per F10 press.
+// F10 toggles menu. Scan results are loaded only when opening.
 if
     0AB0: key_pressed 0x79
 then
@@ -15,9 +22,31 @@ then
         0@ == 0
     then
         0@ = 1
+        1@ = 0
+        2@ = 0
+        3@ = 0
+        4@ = 0
+        5@ = 0
+        6@ = 0
+        7@ = 0
+
+        0A9A: 8@ = openfile "OMNIA_mods.txt" mode "r"
+        if
+            8@ <> 0
+        then
+            0AD7: read_string_from_file 8@ to 1@ size 80
+            0AD7: read_string_from_file 8@ to 2@ size 80
+            0AD7: read_string_from_file 8@ to 3@ size 80
+            0AD7: read_string_from_file 8@ to 4@ size 80
+            0AD7: read_string_from_file 8@ to 5@ size 80
+            0AD7: read_string_from_file 8@ to 6@ size 80
+            0AD7: read_string_from_file 8@ to 7@ size 80
+            0A9B: closefile 8@
+        end
     else
         0@ = 0
     end
+
     while
         0AB0: key_pressed 0x79
     wait 0
@@ -28,18 +57,27 @@ end
 if
     0@ == 1
 then
-    // GTA San Andreas palette: charcoal panel, Grove-green header, gold trim.
-    038E: draw_box_position 320.0 222.0 size 330.0 250.0 RGBA 5 7 6 220
-    038E: draw_box_position 320.0 111.0 size 330.0 28.0 RGBA 35 75 42 245
-    038E: draw_box_position 320.0 130.0 size 330.0 3.0 RGBA 220 155 55 255
-    038E: draw_box_position 320.0 159.0 size 306.0 27.0 RGBA 28 31 29 235
-    038E: draw_box_position 320.0 193.0 size 306.0 27.0 RGBA 28 31 29 235
-    038E: draw_box_position 320.0 227.0 size 306.0 27.0 RGBA 28 31 29 235
-    038E: draw_box_position 320.0 261.0 size 306.0 27.0 RGBA 28 31 29 235
-    038E: draw_box_position 320.0 295.0 size 306.0 27.0 RGBA 28 31 29 235
-    038E: draw_box_position 320.0 330.0 size 330.0 2.0 RGBA 220 155 55 230
+    // GTA San Andreas palette: charcoal, Grove green and warm gold.
+    038E: draw_box_position 320.0 222.0 size 390.0 270.0 RGBA 5 7 6 220
+    038E: draw_box_position 320.0 101.0 size 390.0 30.0 RGBA 35 75 42 245
+    038E: draw_box_position 320.0 120.0 size 390.0 3.0 RGBA 220 155 55 255
+    038E: draw_box_position 320.0 151.0 size 366.0 28.0 RGBA 28 31 29 235
+    038E: draw_box_position 320.0 185.0 size 366.0 28.0 RGBA 28 31 29 235
+    038E: draw_box_position 320.0 219.0 size 366.0 28.0 RGBA 28 31 29 235
+    038E: draw_box_position 320.0 253.0 size 366.0 28.0 RGBA 28 31 29 235
+    038E: draw_box_position 320.0 287.0 size 366.0 28.0 RGBA 28 31 29 235
+    038E: draw_box_position 320.0 321.0 size 366.0 28.0 RGBA 28 31 29 235
+    038E: draw_box_position 320.0 355.0 size 390.0 2.0 RGBA 220 155 55 230
 
-    0ACD: show_text_highpriority "~g~OMNIA SA~w~~n~SAN ANDREAS CONTROL CENTER~n~~n~~y~01~w~  GAME AGENT~n~~y~02~w~  MOD CATALOG~n~~y~03~w~  SETTINGS~n~~y~04~w~  MOUSE FIX~n~~n~~g~MOUSE FIX~w~  DirectInput recovery ASI~n~~n~~y~F10~w~  CLOSE MENU" time 0
+    0ACD: show_text_highpriority "~g~OMNIA SA~w~  |  MOD MANAGER" time 0
+    0ACD: show_text_highpriority "~y~AUTOMATIC MOD DISCOVERY~w~  |  ASI + CLEO" time 0
+    0AD0: show_formatted_text "~w~%s" time 0 1@
+    0AD0: show_formatted_text "~w~%s" time 0 2@
+    0AD0: show_formatted_text "~w~%s" time 0 3@
+    0AD0: show_formatted_text "~w~%s" time 0 4@
+    0AD0: show_formatted_text "~w~%s" time 0 5@
+    0AD0: show_formatted_text "~w~%s" time 0 6@
+    0ACD: show_text_highpriority "~y~F10~w~  CLOSE MENU" time 0
 end
 
 jump @OMNIA_MAIN
