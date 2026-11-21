@@ -34,7 +34,7 @@ jobs:
       - name: Build MinHook
         shell: pwsh
         run: |
-          cmake -S "$env:RUNNER_TEMP\minhook" -B "$env:RUNNER_TEMP\minhook-build" -A Win32 -DMH_BUILD_SHARED=OFF -DMH_BUILD_EXAMPLES=OFF
+          cmake -S "$env:RUNNER_TEMP\minhook" -B "$env:RUNNER_TEMP\minhook-build" -A Win32 -DMH_BUILD_SHARED=OFF -DMH_BUILD_EXAMPLES=OFF -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL
           if ($LASTEXITCODE -ne 0) { throw "MinHook configure failed." }
           cmake --build "$env:RUNNER_TEMP\minhook-build" --config Release
           if ($LASTEXITCODE -ne 0) { throw "MinHook build failed." }
