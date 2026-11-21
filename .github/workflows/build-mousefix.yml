@@ -24,13 +24,31 @@ jobs:
         with:
           arch: x86
 
+      - name: Get MinHook
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch v1.3.4 https://github.com/TsudaKageyu/minhook.git "$env:RUNNER_TEMP\minhook"
+          if ($LASTEXITCODE -ne 0) { throw "MinHook download failed." }
+
+      - name: Build MinHook
+        shell: pwsh
+        run: |
+          cmake -S "$env:RUNNER_TEMP\minhook" -B "$env:RUNNER_TEMP\minhook-build" -A Win32 -DMH_BUILD_SHARED=OFF -DMH_BUILD_EXAMPLES=OFF
+          if ($LASTEXITCODE -ne 0) { throw "MinHook configure failed." }
+          cmake --build "$env:RUNNER_TEMP\minhook-build" --config Release
+          if ($LASTEXITCODE -ne 0) { throw "MinHook build failed." }
+          $lib = Get-ChildItem "$env:RUNNER_TEMP\minhook-build" -Filter "libMinHook.x86.lib" -Recurse | Select-Object -First 1
+          if (-not $lib) { $lib = Get-ChildItem "$env:RUNNER_TEMP\minhook-build" -Filter "*.lib" -Recurse | Where-Object { $_.FullName -match "Release" } | Select-Object -First 1 }
+          if (-not $lib) { throw "MinHook static library not found." }
+          "MINHOOK_LIB=$($lib.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "MINHOOK_INCLUDE=$env:RUNNER_TEMP\minhook\include" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Build 32-bit ASI plugin
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path "dist\OMNIA-MouseFix" | Out-Null
-          cl.exe /nologo /LD /O2 /EHsc /std:c++17 /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN /Fo:"$env:RUNNER_TEMP\mousefix.obj" "src\mousefix\OMNIA_MouseFix.cpp" /link /MACHINE:X86 /OUT:"dist\OMNIA-MouseFix\OMNIA_MouseFix.asi"
-          if ($LASTEXITCODE -ne 0) { throw "MSVC compilation failed." }
-          if (-not (Test-Path "dist\OMNIA-MouseFix\OMNIA_MouseFix.asi")) { throw "ASI output missing." }
+          cl.exe /nologo /LD /O2 /EHsc /std:c++17 /DWIN32_LEAN_AND_MEAN /I"$env:MINHOOK_INCLUDE" "src\mousefix\OMNIA_MouseFix.cpp" "$env:MINHOOK_LIB" /link /MACHINE:X86 dinput8.lib dxguid.lib /OUT:"dist\OMNIA-MouseFix\OMNIA_MouseFix.asi"
+          if ($LASTEXITCODE -ne 0) { throw "MouseFix compilation failed." }
 
       - name: Verification 1 - validate x86 PE binary
         shell: pwsh
@@ -38,12 +56,10 @@ jobs:
           $bytes = [System.IO.File]::ReadAllBytes("dist\OMNIA-MouseFix\OMNIA_MouseFix.asi")
           if ($bytes.Length -lt 256) { throw "ASI binary is unexpectedly small." }
           if ($bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw "Missing MZ header." }
-          $peOffset = [BitConverter]::ToInt32($bytes, 0x3C)
-          if ($peOffset -lt 64 -or $peOffset + 6 -gt $bytes.Length) { throw "Invalid PE header offset." }
-          if ($bytes[$peOffset] -ne 0x50 -or $bytes[$peOffset + 1] -ne 0x45) { throw "Missing PE signature." }
-          $machine = [BitConverter]::ToUInt16($bytes, $peOffset + 4)
-          if ($machine -ne 0x014C) { throw ("Expected x86 (0x014C), got 0x{0:X4}" -f $machine) }
-          Write-Host "Verified valid x86 PE plugin ($($bytes.Length) bytes)."
+          $offset = [BitConverter]::ToInt32($bytes, 0x3C)
+          if ($bytes[$offset] -ne 0x50 -or $bytes[$offset + 1] -ne 0x45) { throw "Missing PE signature." }
+          if ([BitConverter]::ToUInt16($bytes, $offset + 4) -ne 0x014C) { throw "Not an x86 plugin." }
+          Write-Host "x86 PE verification passed."
 
       - name: Stage package
         shell: pwsh
@@ -51,23 +67,22 @@ jobs:
           Copy-Item "docs\MOUSEFIX.md" "dist\OMNIA-MouseFix\INSTALLATION.txt"
           Compress-Archive -Path "dist\OMNIA-MouseFix\*" -DestinationPath "dist\OMNIA-MouseFix.zip" -Force
 
-      - name: Verification 2 - inspect ZIP contents
+      - name: Verification 2 - inspect ZIP
         shell: pwsh
         run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
           $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path "dist\OMNIA-MouseFix.zip"))
           try {
             $names = @($zip.Entries | ForEach-Object { $_.FullName })
             if ($names -notcontains "OMNIA_MouseFix.asi") { throw "ASI missing from ZIP." }
-            if ($names -notcontains "INSTALLATION.txt") { throw "Installation notes missing from ZIP." }
-            Write-Host "Verified ZIP entries: $($names -join ', ')"
-          } finally {
-            $zip.Dispose()
-          }
+            if ($names -notcontains "INSTALLATION.txt") { throw "Installation notes missing." }
+            Write-Host "ZIP verification passed."
+          } finally { $zip.Dispose() }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: OMNIA-MouseFix-diagnostic-x86
+          name: OMNIA-MouseFix-x86
           path: dist/OMNIA-MouseFix.zip
           if-no-files-found: error
           retention-days: 14
