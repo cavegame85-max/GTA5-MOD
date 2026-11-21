@@ -1,37 +1,29 @@
 # OMNIA MouseFix
 
-OMNIA MouseFix is a separate ASI module for classic GTA San Andreas PC. The first CI milestone is a **diagnostic bootstrap**, not yet a mouse-input patch.
+ASI plugin for classic GTA San Andreas PC 1.0 and 1.01 (32-bit).
 
-## Supported targets
+## What this build changes
 
-- GTA San Andreas PC 1.0
-- GTA San Andreas PC 1.01
-- Windows 10 x64, with a 32-bit ASI loader compatible with the game
+The plugin hooks DirectInput 8 initialization and the system mouse device. If the game asks for mouse state or buffered mouse events while DirectInput reports `DIERR_INPUTLOST` or `DIERR_NOTACQUIRED`, MouseFix attempts to reacquire the device and retries that read once.
 
-The plugin itself is built as x86 because both game executables are 32-bit. An ASI loader is required; this package does not include one.
+This is an input-recovery patch. It does not replace the game's controls, synthesize mouse movement, or change keyboard bindings.
 
-## Current milestone: diagnostic bootstrap 0.1.0
+## Requirements
 
-When loaded, the plugin writes:
+- Classic 32-bit GTA San Andreas PC.
+- A compatible ASI Loader already installed.
+- Windows x86/x64.
 
-`%USERPROFILE%\Documents\OMNIA_MouseFix.log`
+The archive does not include an ASI Loader or game files.
 
-It records the foreground window, cursor position, and the state of the left, right, and middle mouse buttons once per second. It does not hook DirectInput, change game settings, or claim to fix the mouse yet. This is intentional: the log lets us distinguish Windows-level mouse input from input lost inside the game before selecting a safe patch.
+## Install
 
-## Install for diagnosis
+1. Close GTA San Andreas.
+2. Back up the game folder.
+3. Extract `OMNIA_MouseFix.asi` into the folder containing `gta_sa.exe` and/or `gta_sa_1.01.exe`.
+4. Start the game normally.
+5. To uninstall, close the game and remove `OMNIA_MouseFix.asi`.
 
-1. Make a backup of the game folder.
-2. Ensure a compatible ASI loader is already installed.
-3. Copy `OMNIA_MouseFix.asi` from the archive into the GTA San Andreas game folder, next to the game executable.
-4. Start only one game executable at a time.
-5. Close the game and inspect `Documents\OMNIA_MouseFix.log`.
+## Compatibility note
 
-To uninstall, remove only `OMNIA_MouseFix.asi`. The log can be deleted separately.
-
-## Verification plan
-
-GitHub Actions performs two independent checks:
-1. Build and verify that the produced plugin is a valid 32-bit PE DLL.
-2. Inspect the ZIP and verify that the expected ASI and installation notes are present.
-
-These CI checks verify the package, not actual mouse operation in GTA. Runtime compatibility and the eventual input fix must still be tested in-game on both 1.0 and 1.01.
+This plugin addresses DirectInput device-lost recovery. It cannot guarantee compatibility with every third-party input wrapper or every mouse driver. Runtime testing on both game executables is required before calling a release fully verified.
