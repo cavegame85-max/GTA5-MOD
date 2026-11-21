@@ -1,0 +1,73 @@
+name: Build OMNIA MouseFix
+
+on:
+  push:
+    branches: [ "omnia-mousefix" ]
+    paths:
+      - "src/mousefix/**"
+      - "docs/MOUSEFIX.md"
+      - ".github/workflows/build-mousefix.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure MSVC x86
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+
+      - name: Build 32-bit ASI plugin
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "dist\OMNIA-MouseFix" | Out-Null
+          cl.exe /nologo /LD /O2 /EHsc /std:c++17 /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN /Fo:"$env:RUNNER_TEMP\mousefix.obj" "src\mousefix\OMNIA_MouseFix.cpp" /link /MACHINE:X86 /OUT:"dist\OMNIA-MouseFix\OMNIA_MouseFix.asi"
+          if ($LASTEXITCODE -ne 0) { throw "MSVC compilation failed." }
+          if (-not (Test-Path "dist\OMNIA-MouseFix\OMNIA_MouseFix.asi")) { throw "ASI output missing." }
+
+      - name: Verification 1 - validate x86 PE binary
+        shell: pwsh
+        run: |
+          $bytes = [System.IO.File]::ReadAllBytes("dist\OMNIA-MouseFix\OMNIA_MouseFix.asi")
+          if ($bytes.Length -lt 256) { throw "ASI binary is unexpectedly small." }
+          if ($bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw "Missing MZ header." }
+          $peOffset = [BitConverter]::ToInt32($bytes, 0x3C)
+          if ($peOffset -lt 64 -or $peOffset + 6 -gt $bytes.Length) { throw "Invalid PE header offset." }
+          if ($bytes[$peOffset] -ne 0x50 -or $bytes[$peOffset + 1] -ne 0x45) { throw "Missing PE signature." }
+          $machine = [BitConverter]::ToUInt16($bytes, $peOffset + 4)
+          if ($machine -ne 0x014C) { throw ("Expected x86 (0x014C), got 0x{0:X4}" -f $machine) }
+          Write-Host "Verified valid x86 PE plugin ($($bytes.Length) bytes)."
+
+      - name: Stage package
+        shell: pwsh
+        run: |
+          Copy-Item "docs\MOUSEFIX.md" "dist\OMNIA-MouseFix\INSTALLATION.txt"
+          Compress-Archive -Path "dist\OMNIA-MouseFix\*" -DestinationPath "dist\OMNIA-MouseFix.zip" -Force
+
+      - name: Verification 2 - inspect ZIP contents
+        shell: pwsh
+        run: |
+          $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path "dist\OMNIA-MouseFix.zip"))
+          try {
+            $names = @($zip.Entries | ForEach-Object { $_.FullName })
+            if ($names -notcontains "OMNIA_MouseFix.asi") { throw "ASI missing from ZIP." }
+            if ($names -notcontains "INSTALLATION.txt") { throw "Installation notes missing from ZIP." }
+            Write-Host "Verified ZIP entries: $($names -join ', ')"
+          } finally {
+            $zip.Dispose()
+          }
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OMNIA-MouseFix-diagnostic-x86
+          path: dist/OMNIA-MouseFix.zip
+          if-no-files-found: error
+          retention-days: 14
