@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <dinput.h>
 #include <cstdio>
+#include <cstring>
 #include <cstdint>
 #include "MinHook.h"
 
