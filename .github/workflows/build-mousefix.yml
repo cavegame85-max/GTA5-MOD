@@ -5,6 +5,7 @@ on:
     branches: [ "omnia-mousefix" ]
     paths:
       - "src/mousefix/**"
+      - "src/OMNIA_MENU.txt"
       - "docs/MOUSEFIX.md"
       - ".github/workflows/build-mousefix.yml"
   workflow_dispatch:
@@ -46,7 +47,7 @@ jobs:
       - name: Build 32-bit ASI plugin
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path "dist\OMNIA-MouseFix" | Out-Null
+          New-Item -ItemType Directory -Force -Path "dist\OMNIA-MouseFix\cleo" | Out-Null
           cl.exe /nologo /LD /O2 /EHsc /std:c++17 /DWIN32_LEAN_AND_MEAN /I"$env:MINHOOK_INCLUDE" "src\mousefix\OMNIA_MouseFix.cpp" "$env:MINHOOK_LIB" /link /MACHINE:X86 dinput8.lib dxguid.lib /OUT:"dist\OMNIA-MouseFix\OMNIA_MouseFix.asi"
           if ($LASTEXITCODE -ne 0) { throw "MouseFix compilation failed." }
 
@@ -84,6 +85,7 @@ jobs:
       - name: Stage package
         shell: pwsh
         run: |
+          Copy-Item "src\OMNIA_MENU.cs" "dist\OMNIA-MouseFix\cleo\OMNIA_MENU.cs"
           Copy-Item "docs\MOUSEFIX.md" "dist\OMNIA-MouseFix\INSTALLATION.txt"
           Compress-Archive -Path "dist\OMNIA-MouseFix\*" -DestinationPath "dist\OMNIA-MouseFix.zip" -Force
 
@@ -96,6 +98,7 @@ jobs:
             $names = @($zip.Entries | ForEach-Object { $_.FullName })
             if ($names -notcontains "OMNIA_MouseFix.asi") { throw "ASI missing from ZIP." }
             if ($names -notcontains "INSTALLATION.txt") { throw "Installation notes missing." }
+            if ($names -notcontains "cleo/OMNIA_MENU.cs") { throw "OMNIA menu CLEO script missing." }
             Write-Host "ZIP verification passed."
           } finally { $zip.Dispose() }
 
